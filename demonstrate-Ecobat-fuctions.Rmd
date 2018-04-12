@@ -1,0 +1,320 @@
+---
+title: "Demonstration of Functions for Ecobat "
+author: "Steve Markham"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_document
+---
+
+
+```{r, echo = TRUE, warning = FALSE, message = FALSE}
+#Libraries used
+library(tidyverse) # Enables a consistent approach to data science
+library(StreamMetabolism) # for sunset / sunrise times
+library(gridExtra) # plots on a grid
+library(broman) #helpful functions
+library(data.table) # to write CSV
+library(knitr) # Controls the R-code of Markdwon documents
+library(hms) # Handles time
+library(kableExtra) # Makes nice tobles
+```
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+#print out code by default
+opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Function files 
+
+source("convert-to-scientific-or-common.R")
+# Convert_to_Sci()
+# Bat_Sci_Com()
+
+source("read-bat-data.R")
+# read_batexplorer()
+# read_kaleidoscope()
+# Check_Static_Column()
+# is_date_ymd
+
+source("utility.R")
+# Fm_date()
+# Bat_Pallet()
+# SpeciesColourScale()
+# get_legend()
+
+source("static-graph-functions.R")
+# ActivePlot2017a()
+# Static_outGraphs()
+# Static_legend()
+# NrGraph_String()
+# Matrix_String()
+# Static_Nightly_Activity()
+
+source("exit-reentry-graph.R")
+# NightData()
+# Exit_Reentry_Times()
+# Exit_Reentry_Graph()
+
+```
+
+# Data (pro forma) 
+
+The structure of the data file required to produce the summary tables and info graphics.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+DataTable <- readxl::read_excel("Data//DataFormatTable.xlsx", 
+                             sheet = 1, 
+                             col_names = TRUE)
+
+
+DataTable3 <- DataTable %>% 
+   select(-Example)
+```
+
+```{r nice-tab12, tidy=FALSE, echo = FALSE, warning = FALSE, message = FALSE}  
+
+knitr::kable(DataTable, "html", booktabs = TRUE, caption = 'Structure of Bat Data') %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, font_size = 12) %>% 
+  column_spec(1, bold = T, border_right = T) %>% 
+  column_spec(2, bold = T, border_right = T, monospace = T) %>% 
+  column_spec(3, border_right = T) %>% 
+  column_spec(4, italic = T) # %>% 
+```
+
+# Read  _csv_ files (BatLogger and Kalidascope)  
+
+## Bat Logger
+
+The function `read_batexplorer` reads an `.csv` file exported from Elekon BatExplorer software <www.batlogger.com> and generates a `tibble` (data.frame) with the recommended data structure for bat analysis given above. The structure of `batexplorer-example.csv` a file exported from Elekon BatExplorer software is shown below:  
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+#csv file exported from BatExplorer software
+
+csv_file <- readr::read_csv("Data//batexplorer-example.csv", col_names = T) 
+
+glimpse(csv_file)
+
+```
+
+The r chunk below reads the exported transect survey data `batexplorer-example.csv` for a site following sound analysis with _BatExplorer_. The _metadata_, key information that makes the data useful, not included with the exported file from _BatExplore_ is added via a character vector `Metadata`. 
+
+```{r}
+# function to convert csv file exported from BatExplorer to the "pro forma" 
+# MetaData Vector - key information that makes the data useful
+MetaData <- c("Site B",        # [1] Site Name
+              "Transect 3",           # [2] Detector Location
+              "Steve Markham",        # [3] Consultant
+              "Elekon",               # [4] Detector Make
+              "Batlogger M",          # [5] Detector Model
+              "BatExplorer",          # [6] Bat Explorer
+              "Version 1.11.4.0",     # [7] Software Version
+              "Pass 2s gap",          # [8] Pass Definition
+              "Manual ID",            # [9] Classification Method
+              "Do not publish",       # [10] Data Sensitivity
+              ""                      # [11] Any Notes
+              )  
+# read the csv and save to a data.frame pro_forma_data
+# "Data//batexplorer-example.csv" is Location of expoted 
+# BatExplorer csv path/filename.csv
+pro_forma_data <- read_batexplorer("Data//batexplorer-example.csv", MetaData)  
+```
+
+The `batexplorer-example.csv` converted to _pro forma_ structure: 
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+# Look at the data.frame
+glimpse(pro_forma_data)
+```
+
+
+## Kaleidoscope
+
+The function `read_kaleidoscope` reads an `.csv` file exported from Wildlife Acoustics Kaleidoscope software <https://www.wildlifeacoustics.com/products/kaleidoscope-software-ultrasonic> and generates a `tibble` (data.frame) with the recommended data structure for bat analysis given above. The structure of `kaleidoscope-example.csv` a file exported from Wildlife Acoustics Kaleidoscope software is shown below:  
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+#csv file exported from BatExplorer software
+
+csv_file <- readr::read_csv("Data//kaleidoscope-example.csv", col_names = T) 
+
+glimpse(csv_file)
+
+```
+
+The r chunk below reads the exported transect survey data `kaleidoscope-example.csv` for a site following sound analysis with _Kaleidoscope_. The _metadata_, key information that makes the data useful, not included with the exported file from _Kaleidoscope_ is added via a character vector `Metadata`; including longitude and latitude as it is not automatically recorded. 
+
+```{r}
+
+# For Kaleidoscope Pro file 
+MetaData <- c("Beaulieu Park",        # [1] Site Name
+              "Transect 3",           # [2] Detector Location
+              "Steve Markham",        # [3] Consultant
+              "Wildlife Acoustics",   # [4] Detector Make
+              "SM4BAT FS",            # [5] Detector Model
+              "Kaleidoscope Pro",     # [6] Bat Explorer
+              "Version",              # [7] Software Version
+              "Pass 2s gap",          # [8] Pass Definition
+              "Manual ID",            # [9] Classification Method
+              "Do not publish",       # [10] Data Sensitivity
+              ""                      # [11] Any Notes
+              ) 
+# SM4 does not give Long and Lat automatically so needs to be provided
+Long <- 0.551
+Lat <- 51.880
+pro_forma_data <- read_kaleidoscope("Data//kaleidoscope-example.csv", 
+                                    MetaData, 
+                                    long, lat)
+```
+
+The `kaleidoscope-example.csv` converted to _pro forma_ structure: 
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+# Look at the data.frame
+glimpse(pro_forma_data)
+```
+
+
+# Summary Tables 
+
+To Create Table and Graphs a `Night` variable is needed. The  original `pro_forma_data` to `Site_Data`; so it can be manipulated.
+
+```{r}
+#Transfer original pro_forma_data to Site_Data; so it can be manipulated
+Site_Data <- pro_forma_data
+
+#To Create Table and Graphs a Night variable is needed
+Site_Data <- Site_Data %>% 
+  mutate (Night = DateTime - lubridate::hours(12), #DateTime minus 12 hours
+          Night = lubridate::as_date(Night)) #make Night variable just a date
+```
+
+
+## Table of Observations by Night
+
+The code below produces a table of observations from the `Site_Data` data.frame. To help understanding, the code is reproduced in full (it could be made a function); the comments help explain the algorithm.
+
+
+```{r, tidy=FALSE}
+
+# Sum bat observations "activity" by night from Site_Data
+BatTable <- Site_Data %>% 
+  #remove the NAs
+  filter(!is.na(ScientificName), !is.na(Night)) %>% 
+  #group species into the night they were observed
+  group_by(ScientificName, Night) %>% 
+  # count the number of observations
+  count(ScientificName) %>%  
+  # order highest number first
+  arrange(desc(Night)) 
+
+#How many nights
+NightNr <- length(levels(factor(BatTable$Night)))
+
+#Make a Common Name Column and move to column 1
+BatTable <- BatTable %>%
+  #ungrouped so date format can be changed
+  ungroup(Night) %>% 
+  mutate(Common = Bat_Sci_Com(ScientificName),
+         # Make a more readable date
+         Night = Fm_date(Night, 1)) %>%
+  select(Night, Common, everything())
+
+# Make the columns names you want
+colnames(BatTable) <- c("Night", "Common Name", "Scientific Name", "Observations (Nr)")
+
+# This code makes the Table below
+knitr::kable(BatTable, "html", booktabs = TRUE, 
+             caption = stringr::str_c('Species observations over ',
+                                      as.character(NightNr),
+                                      " nights")) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = F, 
+                font_size = 12, 
+                position = "left") %>% 
+  row_spec(0, bold = T, color = "white", background = "black") %>% 
+  column_spec(2, italic = T) 
+
+```
+
+# Visualisation  
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+#remove the NA's so plots don't have NA displayed
+Site_Data <- Site_Data %>% 
+  filter(!is.na(ScientificName))
+```
+
+
+## Time Zone and Daylight Saving
+
+The imported data may not have the correct time zone or have been adjusted for daylight saving, the ability to correct this in the code is desirable; the R-code below adjusts the time, minus one hour, and sets the `timezone` as `Europe/London`. 
+
+* `timezone` Local time should be used in the UK; this should follow the _iana_ Time Zone reference (tz) _Europe/London_ it takes into account daylight saving.  
+
+```{r}
+#Make Time Zone Local and make correct time 
+Site_Data$DateTime <- lubridate::with_tz(Site_Data$DateTime, "Europe/London")
+Site_Data$DateTime <- Site_Data$DateTime - lubridate::hours(1) 
+```
+
+
+## Nightly Activity from Statics
+
+The function that generates static detector graph is `Static_Nightly_Activity`. The following Chunk calls the `Static_Nightly_Activity` with:
+
+* the filtered data `StaticData` used to plot the graph  
+* Alpha is the transparency of the bat activity spot (0 - no colour : 1 - full colour); Alpha can be turned down for numerous observations     
+* panel.fill is the graph background colour `"midnightblue"`. An alternative `NULL` = none
+
+
+```{r nice-fig81, warning = FALSE, message = FALSE, fig.cap='Example Static Activity plot', out.width='80%', fig.asp=1.1, fig.align='center'}
+
+# Transfer Site_Data to a StaticData data.frame
+StaticData <- Site_Data
+
+# Visualisation uses Sc
+StaticData$Scientific <- StaticData$ScientificName
+
+# Plot graph
+Static_Nightly_Activity(StaticData, 
+                        Alpha = 0.8, 
+                        panel.fill <- "midnightblue")
+
+```
+
+## Emergence Graphic
+
+The Emergence & Re-entry Graphics are created by the function `Exit_Reentry_Graph` . 
+
+
+```{r}
+# Plot graph
+Exit_Reentry_Graph(StaticData, Dusk = TRUE, Alpha = 0.4)
+
+```
+
+
+The above R Chunck uses the `GraphData` (data.frame) to plot the individual bat emergence times relative to Sunset:
+
+* `Dusk` is set to `TRUE` to plot emergence activity;  
+* `Alpha` (`dot transparancy`) is set to `0.3`(30%) to help distinguish the high level of activity.  
+
+The plotted data could also be that observed on a _Transect_ or a group of _static detectors_. 
+
+## Re-entry Graphic
+
+Figure below shows the dawn re-entry graph note that the argument list has:
+
+* `Dusk` is set to `FALSE` to plot reentry activity;  
+
+
+```{r }
+# Plot graph
+Exit_Reentry_Graph(StaticData, Dusk = FALSE, Alpha = 0.5)
+
+```
+
+The `Exit_Reentry_Graph` calculates the sun times and the bat activity relative to the sun times using a couple functions `NightData` and `Exit_Reentry_Times`:   
+
+* `NightData` uses the bat data (e.g. `GraphData`) and the function `sunrise.set` from the  `StreamMetabolism` package a table (`tibble`) is created of sunset, sunrise and night length from the `Night` range and location (`latitude` and `longitude`)    
+* `Exit_Reentry_Times` merges, by `Night`, the table generated in `NightData` with the observation data (in the example above `GraphData`) and calculates the time each bat was observed relative to sunset and sunrise.  
